@@ -101,7 +101,10 @@ export async function processMediaAssets({
 	// Apple Live Photos arrive as a HEIC still + a separate .MOV; detect the
 	// pairs up front so we can label the motion clip and decode the still.
 	const livePhotos = detectLivePhotoPairs({ files: fileArray });
-	let livePhotoCount = 0;
+	// Track which Live Photo halves actually imported, so the summary only claims
+	// a pair when both the still and its motion clip succeeded.
+	const importedStillStems = new Set<string>();
+	const importedMotionStems = new Set<string>();
 
 	const total = fileArray.length;
 	let completed = 0;
@@ -114,22 +117,10 @@ export async function processMediaAssets({
 			continue;
 		}
 
-		const storageCheck = await storageService.canStoreFile({
-			size: originalFile.size,
-		});
-
-		if (!storageCheck.canStore) {
-			toast.error(`Not enough browser storage for ${originalFile.name}`, {
-				description: getStorageLimitDescription({
-					fileSize: originalFile.size,
-					availableBytes: storageCheck.availableBytes,
-				}),
-			});
-			continue;
-		}
-
 		// HEIC stills can't be rendered by the browser — transcode to JPEG and
-		// use that everywhere downstream. A failure here means the still is
+		// use that everywhere downstream. Do this before the storage check so the
+		// check measures the JPEG we actually persist (which can be larger than
+		// the compressed HEIC), not the source. A failure means the still is
 		// unusable, so skip it.
 		let file = originalFile;
 		if (isHeicFile({ file: originalFile })) {
@@ -145,10 +136,24 @@ export async function processMediaAssets({
 			}
 		}
 
+		const storageCheck = await storageService.canStoreFile({
+			size: file.size,
+		});
+
+		if (!storageCheck.canStore) {
+			toast.error(`Not enough browser storage for ${originalFile.name}`, {
+				description: getStorageLimitDescription({
+					fileSize: file.size,
+					availableBytes: storageCheck.availableBytes,
+				}),
+			});
+			continue;
+		}
+
 		const stem = getFileStem({ name: originalFile.name });
+		const stemKey = stem.toLowerCase();
 		const isLivePhotoMotion = livePhotos.motionFiles.has(originalFile);
 		const assetName = isLivePhotoMotion ? `${stem} (Live Photo)` : file.name;
-		if (isLivePhotoMotion) livePhotoCount += 1;
 
 		const url = URL.createObjectURL(file);
 		let thumbnailUrl: string | undefined;
@@ -210,6 +215,15 @@ export async function processMediaAssets({
 				hasAudio,
 			});
 
+			// Record which Live Photo halves imported successfully.
+			if (livePhotos.pairedStems.has(stemKey)) {
+				if (isLivePhotoMotion) {
+					importedMotionStems.add(stemKey);
+				} else if (fileType === "image") {
+					importedStillStems.add(stemKey);
+				}
+			}
+
 			await new Promise((resolve) => setTimeout(resolve, 0));
 
 			completed += 1;
@@ -221,6 +235,13 @@ export async function processMediaAssets({
 			console.error("Error processing file:", file.name, error);
 			toast.error(`Failed to process ${file.name}`);
 			URL.revokeObjectURL(url);
+		}
+	}
+
+	let livePhotoCount = 0;
+	for (const stemKey of livePhotos.pairedStems) {
+		if (importedStillStems.has(stemKey) && importedMotionStems.has(stemKey)) {
+			livePhotoCount += 1;
 		}
 	}
 

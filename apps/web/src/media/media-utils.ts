@@ -49,21 +49,29 @@ export function getFileStem({ name }: { name: string }): string {
 	return dot === -1 ? name : name.slice(0, dot);
 }
 
+// A MIME type we shouldn't trust over the file extension: empty, or the generic
+// "binary blob" type the OS hands out for HEIC/MOV downloaded or dragged from
+// some sources.
+function isGenericMimeType(type: string): boolean {
+	return type === "" || type === "application/octet-stream";
+}
+
 /**
  * Detect HEIC/HEIF stills. Browsers can't decode these in an <img>, so callers
  * must convert them to a web-friendly format before use (see media/heic.ts).
+ * The extension is authoritative when the MIME type is missing or generic.
  */
 export function isHeicFile({ file }: { file: File }): boolean {
 	const type = file.type.toLowerCase();
 	if (type === "image/heic" || type === "image/heif") return true;
-	if (type) return false;
 	const ext = getFileExtension({ name: file.name });
-	return ext === "heic" || ext === "heif";
+	return (ext === "heic" || ext === "heif") && isGenericMimeType(type);
 }
 
 export function isQuickTimeFile({ file }: { file: File }): boolean {
-	if (file.type === "video/quicktime") return true;
-	return !file.type && getFileExtension({ name: file.name }) === "mov";
+	const type = file.type.toLowerCase();
+	if (type === "video/quicktime") return true;
+	return getFileExtension({ name: file.name }) === "mov" && isGenericMimeType(type);
 }
 
 export const getMediaTypeFromFile = ({

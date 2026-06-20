@@ -71,7 +71,18 @@ function decodeInWorker({
 	return new Promise<Blob>((resolve, reject) => {
 		const id = nextRequestId++;
 		pending.set(id, { resolve, reject });
-		getWorker().postMessage({ id, blob: file, quality });
+		try {
+			getWorker().postMessage({ id, blob: file, quality });
+		} catch (error) {
+			// Creating the worker or posting failed synchronously — drop the entry
+			// so it doesn't leak, and reject so the caller can fall back.
+			pending.delete(id);
+			reject(
+				error instanceof Error
+					? error
+					: new Error("Failed to start HEIC worker"),
+			);
+		}
 	});
 }
 
