@@ -11,6 +11,7 @@ import {
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { buildTransformFromParams } from "@/rendering";
 import { resolveTextLayout } from "@/text/primitives";
+import { resolveFontFamily } from "@/fonts/font-aliases";
 import {
 	buildTextBackgroundFromElement,
 	buildTextLayoutParamsFromElement,
@@ -126,7 +127,7 @@ export function TextEditOverlay({
 				className="cursor-text select-text outline-none whitespace-pre"
 				style={{
 					fontSize: resolvedTextLayout.scaledFontSize,
-					fontFamily: textParams.fontFamily,
+					fontFamily: resolveFontFamily(textParams.fontFamily),
 					fontWeight: textParams.fontWeight === "bold" ? "bold" : "normal",
 					fontStyle: textParams.fontStyle === "italic" ? "italic" : "normal",
 					textAlign: textParams.textAlign,

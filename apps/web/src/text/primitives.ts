@@ -9,6 +9,7 @@ import {
 	setCanvasLetterSpacing,
 } from "./layout";
 import { FONT_SIZE_SCALE_REFERENCE } from "./typography";
+import { resolveFontFamily } from "@/fonts/font-aliases";
 
 export type TextAlign = "left" | "center" | "right";
 export type TextFontWeight = "normal" | "bold";
@@ -68,7 +69,7 @@ export function buildTextFontString({
 	fontStyle: TextFontStyle;
 	scaledFontSize: number;
 }): string {
-	return `${fontStyle} ${fontWeight} ${scaledFontSize}px ${quoteFontFamily({ fontFamily })}, sans-serif`;
+	return `${fontStyle} ${fontWeight} ${scaledFontSize}px ${quoteFontFamily({ fontFamily: resolveFontFamily(fontFamily) })}, sans-serif`;
 }
 
 export function resolveTextLayout({

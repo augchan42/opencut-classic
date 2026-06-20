@@ -1,5 +1,6 @@
 import type { FontAtlas } from "@/fonts/types";
 import { SYSTEM_FONTS } from "@/fonts/system-fonts";
+import { resolveFontFamily } from "@/fonts/font-aliases";
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 const FONT_ATLAS_PATH = "/fonts/font-atlas.json";
@@ -59,9 +60,12 @@ export async function loadFullFont({
 	family: string;
 	weights?: number[];
 }): Promise<void> {
-	if (fullLoaded.has(family)) return;
+	// Aliases (e.g. "Cardone") resolve to a real, loadable family before we
+	// touch Google Fonts or the FontFace API.
+	const realFamily = resolveFontFamily(family);
+	if (fullLoaded.has(realFamily)) return;
 
-	const url = `${GOOGLE_FONTS_CSS}?family=${encodeGoogleFontsFamily(family)}:wght@${weights.join(";")}&display=swap`;
+	const url = `${GOOGLE_FONTS_CSS}?family=${encodeGoogleFontsFamily(realFamily)}:wght@${weights.join(";")}&display=swap`;
 	const link = document.createElement("link");
 	link.rel = "stylesheet";
 	link.href = url;
@@ -72,10 +76,10 @@ export async function loadFullFont({
 	});
 	await Promise.all(
 		weights.map((weight) =>
-			document.fonts.load(`${weight} 16px "${family.replace(/"/g, '\\"')}"`),
+			document.fonts.load(`${weight} 16px "${realFamily.replace(/"/g, '\\"')}"`),
 		),
 	);
-	fullLoaded.add(family);
+	fullLoaded.add(realFamily);
 }
 
 export async function loadFonts({

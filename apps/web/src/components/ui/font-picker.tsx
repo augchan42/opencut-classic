@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useMemo, useRef, useCallback, type CSSProperties } from "react";
 import { List, type RowComponentProps } from "react-window";
 import {
 	Popover,
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { loadFullFont } from "@/fonts/google-fonts";
 import { SYSTEM_FONTS } from "@/fonts/system-fonts";
+import { getFontAlias, resolveFontFamily } from "@/fonts/font-aliases";
 import type { FontAtlas, FontAtlasEntry } from "@/fonts/types";
 import { useFontAtlas } from "@/fonts/use-font-atlas";
 import { cn } from "@/utils/ui";
@@ -75,18 +76,20 @@ export function FontPicker({
 		[onValueChange],
 	);
 
-	useEffect(() => {
-		if (!open) {
+	const handleOpenChange = useCallback((next: boolean) => {
+		setOpen(next);
+		// Reset search/tab when the popover closes.
+		if (!next) {
 			setSearch("");
 			setActiveTab("all");
 		}
-	}, [open]);
+	}, []);
 
 	const activeTabLabel =
 		FONT_TABS.find((t) => t.key === activeTab)?.label.toLowerCase() ?? "";
 
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover open={open} onOpenChange={handleOpenChange}>
 			<PopoverTrigger
 				className={cn(
 					"border-border bg-accent flex h-7 w-full cursor-pointer items-center justify-between gap-1 rounded-md border px-2.5 text-sm whitespace-nowrap focus-visible:border-primary focus-visible:ring-0 focus:outline-hidden",
@@ -97,7 +100,14 @@ export function FontPicker({
 					<span className="text-muted-foreground [&_svg]:size-3.5 shrink-0">
 						<HugeiconsIcon icon={TextIcon} />
 					</span>
-					<span className="truncate" style={{ fontFamily: defaultValue }}>
+					<span
+						className="truncate"
+						style={{
+							fontFamily: defaultValue
+								? resolveFontFamily(defaultValue)
+								: undefined,
+						}}
+					>
 						{defaultValue ?? "Select a font"}
 					</span>
 				</div>
@@ -226,6 +236,7 @@ function FontRow({
 	const entry = atlas.fonts[fontName];
 	const isSelected = fontName === selectedFont;
 	const isSystemFont = SYSTEM_FONTS.has(fontName);
+	const alias = getFontAlias(fontName);
 
 	return (
 		<button
@@ -242,10 +253,22 @@ function FontRow({
 					onFontSelect({ family: fontName });
 				}
 			}}
-			aria-label={fontName}
+			aria-label={alias ? `${fontName} (${alias.note})` : fontName}
 		>
-			<div className="min-w-0 overflow-hidden">
-				{isSystemFont ? (
+			<div className="flex min-w-0 flex-col overflow-hidden text-left">
+				{alias ? (
+					<>
+						<span
+							className="truncate text-xl text-foreground/85"
+							style={{ fontFamily: alias.resolvesTo }}
+						>
+							{fontName}
+						</span>
+						<span className="truncate text-[10px] leading-none text-muted-foreground">
+							{alias.note}
+						</span>
+					</>
+				) : isSystemFont ? (
 					<span className="text-xl text-foreground/85" style={{ fontFamily: fontName }}>
 						{fontName}
 					</span>
