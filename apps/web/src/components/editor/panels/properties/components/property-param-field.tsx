@@ -22,8 +22,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { usePropertyDraft } from "../hooks/use-property-draft";
+import { useTextDraft } from "../hooks/use-text-draft";
 import { KeyframeToggle } from "./keyframe-toggle";
 import { Textarea } from "@/components/ui/textarea";
+import { loadFullFont } from "@/fonts/google-fonts";
+import { SYSTEM_FONTS } from "@/fonts/system-fonts";
 
 export function PropertyParamField({
 	param,
@@ -138,26 +141,75 @@ function ParamInput({
 
 	if (param.type === "text") {
 		return (
-			<Textarea
+			<TextParamField
 				value={String(value)}
-				onChange={(event) => onPreview(event.currentTarget.value)}
-				onBlur={onCommit}
+				onPreview={onPreview}
+				onCommit={onCommit}
+				multiline
 			/>
 		);
 	}
 
 	if (param.type === "font") {
 		return (
-			<input
-				className="border-input bg-accent h-9 w-full rounded-md border px-3 text-sm outline-none"
+			<TextParamField
 				value={String(value)}
-				onChange={(event) => onPreview(event.currentTarget.value)}
-				onBlur={onCommit}
+				onPreview={onPreview}
+				onCommit={onCommit}
+				onCommitValue={(family) => {
+					if (family && !SYSTEM_FONTS.has(family)) {
+						// Download the chosen family (resolves aliases like
+						// "Cardone") so it renders without a project reload.
+						void loadFullFont({ family }).catch(() => {});
+					}
+				}}
 			/>
 		);
 	}
 
 	return null;
+}
+
+function TextParamField({
+	value,
+	onPreview,
+	onCommit,
+	onCommitValue,
+	multiline = false,
+}: {
+	value: string;
+	onPreview: (value: ParamValue) => void;
+	onCommit: () => void;
+	onCommitValue?: (value: string) => void;
+	multiline?: boolean;
+}) {
+	const draft = useTextDraft({
+		value,
+		onPreview: (next) => onPreview(next),
+		onCommit,
+		onCommitValue,
+	});
+
+	if (multiline) {
+		return (
+			<Textarea
+				value={draft.value}
+				onFocus={draft.onFocus}
+				onChange={(event) => draft.onChange(event.currentTarget.value)}
+				onBlur={draft.onBlur}
+			/>
+		);
+	}
+
+	return (
+		<input
+			className="border-input bg-accent h-9 w-full rounded-md border px-3 text-sm outline-none"
+			value={draft.value}
+			onFocus={draft.onFocus}
+			onChange={(event) => draft.onChange(event.currentTarget.value)}
+			onBlur={draft.onBlur}
+		/>
+	);
 }
 
 function NumberParamField({
