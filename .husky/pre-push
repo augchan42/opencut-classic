@@ -8,30 +8,28 @@ echo "Running pre-push checks..."
 
 # 1. Type-check the web app (uses apps/web's pinned TypeScript, not root's).
 echo "🔎 Type checking..."
-bun run typecheck
-if [ $? -ne 0 ]; then
+if ! bun run typecheck; then
   echo "❌ Type check failed. Fix TypeScript errors before pushing."
   exit 1
 fi
 
-# 2. Lint only the TS/TSX files changed in this push.
-#    The repo still carries pre-existing lint debt in untouched files, so we
-#    lint the push diff instead of the whole tree — this avoids blocking every
-#    push while still catching new lint regressions in code you're pushing.
-upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
-[ -z "$upstream" ] && upstream="origin/main"
-base="$(git merge-base "$upstream" HEAD 2>/dev/null)"
+# 2. Lint only the TS/TSX files this branch changes vs main. We base off
+#    origin/main rather than @{upstream} because the latter exits 128 on the
+#    first push of a branch (no upstream yet), which aborts the hook under the
+#    husky runner. Every command is guarded so a missing ref never aborts.
+#    Linting the diff (not the whole tree) avoids the repo's pre-existing lint
+#    debt while still catching new regressions.
+base="$(git merge-base origin/main HEAD 2>/dev/null || true)"
+[ -z "$base" ] && base="$(git rev-parse origin/main 2>/dev/null || true)"
 
+changed=""
 if [ -n "$base" ]; then
-  changed="$(git diff --name-only --diff-filter=ACMR "$base" HEAD | grep -E '^apps/web/src/.*\.(ts|tsx)$' || true)"
-else
-  changed=""
+  changed="$(git diff --name-only --diff-filter=ACMR "$base" HEAD 2>/dev/null | grep -E '^apps/web/src/.*\.(ts|tsx)$' || true)"
 fi
 
 if [ -n "$changed" ]; then
   echo "🧹 Linting changed files..."
-  echo "$changed" | xargs bunx eslint
-  if [ $? -ne 0 ]; then
+  if ! printf '%s\n' "$changed" | xargs bunx eslint; then
     echo "❌ Lint failed on changed files. Fix lint errors before pushing."
     exit 1
   fi
