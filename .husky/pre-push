@@ -1,0 +1,43 @@
+#!/usr/bin/env sh
+
+# Ensure bun is on PATH for GUI git clients that run with a minimal environment.
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+echo "Running pre-push checks..."
+
+# 1. Type-check the web app (uses apps/web's pinned TypeScript, not root's).
+echo "🔎 Type checking..."
+bun run typecheck
+if [ $? -ne 0 ]; then
+  echo "❌ Type check failed. Fix TypeScript errors before pushing."
+  exit 1
+fi
+
+# 2. Lint only the TS/TSX files changed in this push.
+#    The repo still carries pre-existing lint debt in untouched files, so we
+#    lint the push diff instead of the whole tree — this avoids blocking every
+#    push while still catching new lint regressions in code you're pushing.
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
+[ -z "$upstream" ] && upstream="origin/main"
+base="$(git merge-base "$upstream" HEAD 2>/dev/null)"
+
+if [ -n "$base" ]; then
+  changed="$(git diff --name-only --diff-filter=ACMR "$base" HEAD | grep -E '^apps/web/src/.*\.(ts|tsx)$' || true)"
+else
+  changed=""
+fi
+
+if [ -n "$changed" ]; then
+  echo "🧹 Linting changed files..."
+  echo "$changed" | xargs bunx eslint
+  if [ $? -ne 0 ]; then
+    echo "❌ Lint failed on changed files. Fix lint errors before pushing."
+    exit 1
+  fi
+else
+  echo "🧹 No changed web TS/TSX files to lint."
+fi
+
+echo "✅ Pre-push checks passed!"
+exit 0

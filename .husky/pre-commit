@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+# Ensure bun is on PATH for GUI git clients that run with a minimal environment.
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# Lint + auto-fix only the staged files (see "lint-staged" in package.json).
+bun run lint-staged-run
