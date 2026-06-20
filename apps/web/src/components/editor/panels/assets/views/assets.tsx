@@ -117,7 +117,8 @@ export function MediaView() {
 
 	const { isDragOver, dragProps, openFilePicker, fileInputProps } =
 		useFileUpload({
-			accept: "image/*,video/*,audio/*",
+			accept:
+				"image/*,video/*,audio/*,.heic,.heif,.mov",
 			multiple: true,
 			onFilesSelected: (files) => processFiles({ files }),
 		});

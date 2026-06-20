@@ -1,5 +1,11 @@
 import { toast } from "sonner";
-import { getMediaTypeFromFile } from "@/media/media-utils";
+import {
+	getFileStem,
+	getMediaTypeFromFile,
+	isHeicFile,
+} from "@/media/media-utils";
+import { convertHeicToJpeg } from "@/media/heic";
+import { detectLivePhotoPairs } from "@/media/live-photo";
 import { formatStorageBytes } from "@/services/storage/quota";
 import { storageService } from "@/services/storage/service";
 import type { MediaAsset } from "@/media/types";
@@ -7,7 +13,7 @@ import { readVideoFile } from "./mediabunny";
 import type { VideoFileData } from "./mediabunny";
 import { renderThumbnailDataUrl } from "./thumbnail";
 
-export interface ProcessedMediaAsset extends Omit<MediaAsset, "id"> {}
+export type ProcessedMediaAsset = Omit<MediaAsset, "id">;
 
 const getUnsupportedVideoDescription = ({
 	codec,
@@ -92,30 +98,57 @@ export async function processMediaAssets({
 	const fileArray = Array.from(files);
 	const processedAssets: ProcessedMediaAsset[] = [];
 
+	// Apple Live Photos arrive as a HEIC still + a separate .MOV; detect the
+	// pairs up front so we can label the motion clip and decode the still.
+	const livePhotos = detectLivePhotoPairs({ files: fileArray });
+	let livePhotoCount = 0;
+
 	const total = fileArray.length;
 	let completed = 0;
 
-	for (const file of fileArray) {
-		const fileType = getMediaTypeFromFile({ file });
+	for (const originalFile of fileArray) {
+		const fileType = getMediaTypeFromFile({ file: originalFile });
 
 		if (!fileType) {
-			toast.error(`Unsupported file type: ${file.name}`);
+			toast.error(`Unsupported file type: ${originalFile.name}`);
 			continue;
 		}
 
 		const storageCheck = await storageService.canStoreFile({
-			size: file.size,
+			size: originalFile.size,
 		});
 
 		if (!storageCheck.canStore) {
-			toast.error(`Not enough browser storage for ${file.name}`, {
+			toast.error(`Not enough browser storage for ${originalFile.name}`, {
 				description: getStorageLimitDescription({
-					fileSize: file.size,
+					fileSize: originalFile.size,
 					availableBytes: storageCheck.availableBytes,
 				}),
 			});
 			continue;
 		}
+
+		// HEIC stills can't be rendered by the browser — transcode to JPEG and
+		// use that everywhere downstream. A failure here means the still is
+		// unusable, so skip it.
+		let file = originalFile;
+		if (isHeicFile({ file: originalFile })) {
+			try {
+				file = await convertHeicToJpeg({ file: originalFile });
+			} catch (error) {
+				console.error("HEIC decode failed:", originalFile.name, error);
+				toast.error(`Couldn't read ${originalFile.name}`, {
+					description:
+						"This HEIC image could not be decoded. Try re-exporting it as JPEG.",
+				});
+				continue;
+			}
+		}
+
+		const stem = getFileStem({ name: originalFile.name });
+		const isLivePhotoMotion = livePhotos.motionFiles.has(originalFile);
+		const assetName = isLivePhotoMotion ? `${stem} (Live Photo)` : file.name;
+		if (isLivePhotoMotion) livePhotoCount += 1;
 
 		const url = URL.createObjectURL(file);
 		let thumbnailUrl: string | undefined;
@@ -165,7 +198,7 @@ export async function processMediaAssets({
 			}
 
 			processedAssets.push({
-				name: file.name,
+				name: assetName,
 				type: fileType,
 				file,
 				url,
@@ -191,14 +224,24 @@ export async function processMediaAssets({
 		}
 	}
 
+	if (livePhotoCount > 0) {
+		toast.success(
+			`Imported ${livePhotoCount} Live Photo${livePhotoCount > 1 ? "s" : ""}`,
+			{
+				description:
+					"Added the still and its motion clip. Motion clips are HEVC and may only preview in Safari.",
+			},
+		);
+	}
+
 	return processedAssets;
 }
 
 const getMediaDuration = ({ file }: { file: File }): Promise<number> => {
 	return new Promise((resolve, reject) => {
-		const element = document.createElement(
-			file.type.startsWith("video/") ? "video" : "audio",
-		) as HTMLVideoElement;
+		const element: HTMLMediaElement = file.type.startsWith("video/")
+			? document.createElement("video")
+			: document.createElement("audio");
 		const objectUrl = URL.createObjectURL(file);
 
 		element.addEventListener("loadedmetadata", () => {
