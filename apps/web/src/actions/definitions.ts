@@ -152,6 +152,43 @@ export const ACTIONS = {
 
 export type TAction = keyof typeof ACTIONS;
 
+/** Runtime guard: is `value` a known action id? */
+export function isAction(value: string): value is TAction {
+	return Object.prototype.hasOwnProperty.call(ACTIONS, value);
+}
+
+// Actions whose args are required (cannot be invoked argument-free), so they
+// can't be bound to a keybinding. Kept in sync with the type via the checks
+// below: `satisfies` rejects unknown/optional-arg ids, and `_AllRequired`
+// fails to compile if a required-args action is missing from this list.
+const ARGS_REQUIRED_ACTIONS = [
+	"remove-media-asset",
+	"remove-media-assets",
+] as const satisfies readonly Exclude<TAction, TActionWithOptionalArgs>[];
+
+type _AllRequired = Exclude<
+	Exclude<TAction, TActionWithOptionalArgs>,
+	(typeof ARGS_REQUIRED_ACTIONS)[number]
+> extends never
+	? true
+	: never;
+const _allRequiredCovered: _AllRequired = true;
+void _allRequiredCovered;
+
+const ARGS_REQUIRED_ACTION_SET: ReadonlySet<string> = new Set(
+	ARGS_REQUIRED_ACTIONS,
+);
+
+/**
+ * Runtime guard for `TActionWithOptionalArgs` — a known action that can be
+ * invoked without arguments, and is therefore bindable to a shortcut.
+ */
+export function isActionWithOptionalArgs(
+	value: string,
+): value is TActionWithOptionalArgs {
+	return isAction(value) && !ARGS_REQUIRED_ACTION_SET.has(value);
+}
+
 const ACTION_DEFAULT_SHORTCUTS = [
 	["toggle-play", ["space", "k"]],
 	["seek-forward", ["l"]],

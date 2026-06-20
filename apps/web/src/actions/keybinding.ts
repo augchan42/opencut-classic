@@ -38,6 +38,34 @@ export type SingleCharacterShortcutKey = `${Key}`;
 
 export type ShortcutKey = ModifierBasedShortcutKey | SingleCharacterShortcutKey;
 
+const MODIFIER_KEY_SET: ReadonlySet<string> = new Set<ModifierKeys>([
+	"ctrl",
+	"alt",
+	"shift",
+	"ctrl+shift",
+	"alt+shift",
+	"ctrl+alt",
+	"ctrl+alt+shift",
+]);
+
+/**
+ * Runtime guard for `ShortcutKey`. A valid shortcut is either a bare key
+ * (e.g. "a", "/", "enter") or a modifier combination followed by a key
+ * (e.g. "ctrl+shift+a"). Used when decoding persisted/imported keybindings,
+ * which arrive as untrusted strings.
+ */
+export function isShortcutKey(value: string): value is ShortcutKey {
+	const lastPlus = value.lastIndexOf("+");
+	// No modifier prefix → must be a bare key. (lastPlus === 0 means the string
+	// starts with "+", which is never valid.)
+	if (lastPlus <= 0) {
+		return isKey(value);
+	}
+	const modifiers = value.slice(0, lastPlus);
+	const key = value.slice(lastPlus + 1);
+	return MODIFIER_KEY_SET.has(modifiers) && isKey(key);
+}
+
 export type KeybindingConfig = {
 	[key in ShortcutKey]?: TActionWithOptionalArgs;
 };
